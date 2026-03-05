@@ -7,7 +7,7 @@ authors = [
     { name = "matthias springstein", email = "matthias.springstein@gmail.com" },
 ]
 requires-python = ">=3.12"
-dependencies = ["interface", "utils"]
+dependencies = ["interface", "utils", "mava"]
 
 [tool.uv]
 package = true
@@ -15,3 +15,4 @@ package = true
 [tool.uv.sources]
 interface = { workspace = true }
 utils = { workspace = true }
+mava = { git = "https://github.com/sdsc-ordes/mava-api.git" }
