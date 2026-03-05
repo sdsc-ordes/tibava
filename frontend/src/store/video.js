@@ -242,6 +242,13 @@ export const useVideoStore = defineStore("video", {
                             link.download = `${video_id}.${res.data.extension}`;
                             link.click();
                         }
+                        else if (res.data.extension === "ttl") {
+                            let blob = new Blob([res.data.file], { type: `text/turtle` });
+                            let link = document.createElement("a");
+                            link.href = window.URL.createObjectURL(blob);
+                            link.download = `${video_id}.${res.data.extension}`;
+                            link.click();
+                        }
                     }
                 })
                 .finally(() => {

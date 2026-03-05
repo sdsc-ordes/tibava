@@ -139,6 +139,12 @@ export default {
             },
           ],
         },
+        {
+          name: this.$t("modal.export.mava.export_name"),
+          icon: "mdi-file",
+          export: "mava",
+          parameters: [],
+        },
       ],
     };
   },
