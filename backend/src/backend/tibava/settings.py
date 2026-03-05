@@ -28,7 +28,7 @@ DEBUG = True
 FORCE_SCRIPT_NAME = "/"
 
 ALLOWED_HOSTS = ["localhost"]
-CSRF_TRUSTED_ORIGINS = ["http://localhost", "https://localhost", "http://localhost:8080"]
+CSRF_TRUSTED_ORIGINS = ["http://localhost", "https://localhost", "http://localhost:8080", "http://localhost:8000"]
 
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True

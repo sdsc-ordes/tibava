@@ -29,8 +29,9 @@ from backend.models import (
     PluginRunResult,
     PluginRun,
 )
+from mava.graph.builder import GraphBuilder
 from enum import Enum
-from data import DataManager, Shot
+from data import DataManager, Shot, AnnotationData, Annotation as DataAnnotation
 import numpy as np
 
 
@@ -700,6 +701,72 @@ class VideoExport(View):
         result = str_out.getvalue()
 
         return result
+    
+    def export_mava(self, parameters, video_db):
+        data_manager = DataManager("/predictions/")
+        logging.info("Building MAVA graph")
+        graph_builder = GraphBuilder()
+
+        # Clear any existing graph state
+        graph_builder.clear_graph()
+
+        data = AnnotationData()
+
+        # Process all timelines with annotation data
+        logging.info("Processing timeline")
+        for timeline_db in Timeline.objects.filter(video=video_db):
+            if timeline_db.type != Timeline.TYPE_ANNOTATION:
+                raise Exception
+            elif timeline_db.type == None:
+                raise Exception
+            logging.info("Loading annotation data")
+            for id, segment_db in enumerate(timeline_db.timelinesegment_set.all()):
+                # if the timeline contains annotations, export them
+                if len(segment_db.timelinesegmentannotation_set.all()) > 0:
+                    annotations = []
+                    for (
+                        segment_annotation_db
+                    ) in segment_db.timelinesegmentannotation_set.all():
+                        category = segment_annotation_db.annotation.category
+                        name = segment_annotation_db.annotation.name
+                        if category is not None:
+                            anno = f"{category.name}:{name}"
+                        else:
+                            anno = f"{name}"
+                        annotations.append(anno)
+                    if len(annotations) > 0:
+                        data_anno = DataAnnotation(
+                            start = segment_db.start,
+                            end = segment_db.end,
+                            labels = annotations
+                        )
+                        data.annotations.append(data_anno)
+                    else:
+                        logging.warning("No annotations found for segment %s", segment_db.id)
+                        continue
+                    mava_data = data.to_mava()
+                    logging.info(f"MAVA data size: {len(mava_data)}")
+                    if mava_data is None:
+                        raise ValueError("to_mava() returned None. Check AnnotationData structure.")
+                    logging.info("Adding MAVA data to MAVA graph")
+                    graph_builder.add_rdf_data(mava_data, format="turtle")
+
+        # Export final graph as Turtle
+        logging.info("Exporting MAVA data")
+        turtle_output = graph_builder.export_graph(format="turtle")
+
+        # Use stdout to export
+
+        logging.info("Exporting to stdout")
+        stdout = sys.stdout
+        sys.stdout = str_out = StringIO()
+        logging.info("Writing to stdout")
+        sys.stdout.write(turtle_output)
+        sys.stdout = stdout
+        logging.info("Done")
+        result = str_out.getvalue()
+        logging.info("Return values")
+        return result
 
     def post(self, request):
         try:
@@ -760,6 +827,12 @@ class VideoExport(View):
                 result = self.export_elan(parameters, video_db)
                 return JsonResponse(
                     {"status": "ok", "file": result, "extension": "eaf"}
+                )
+            
+            elif request.POST.get("format") == "mava":
+                result = self.export_mava(parameters, video_db)
+                return JsonResponse(
+                    {"status": "ok", "file": result, "extension": "ttl"}
                 )
 
             return JsonResponse({"status": "error", "type": "unknown_format"})

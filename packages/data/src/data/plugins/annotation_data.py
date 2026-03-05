@@ -4,8 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy.typing as npt
 import numpy as np
-from mava import GraphBuilder
-
+from mava.graph.builder import GraphBuilder
 from ..manager import DataManager
 from ..data import Data
 from interface import analyser_pb2
@@ -60,11 +59,17 @@ class AnnotationData(Data):
         }
     
     def to_mava_dict(self) -> List[dict]:
-        return [ann.to_mava_dict() for ann in self.annotations]
+        test = []
+        for ann in self.annotations:
+            test.append(ann.to_mava_dict())
+        return test
     
     
     def to_mava(self) -> bytes:
         mava_data = self.to_mava_dict()
+        if mava_data is None:
+            logging.warning("No MAVA data generated. Returning empty bytes.")
+            return b""  # Return empty bytes instead of None
         mava_mapping =  {
                     "series_description": "Annotation",
                     "value_description": "annotation",
@@ -75,4 +80,5 @@ class AnnotationData(Data):
                     "duration_column": "duration"
                     }
         mava_graph = GraphBuilder()
-        return mava_graph.add_mapped_data(mava_data, mava_mapping)
+        mava_graph.add_mapped_data(mava_data, mava_mapping)
+        return mava_graph.export_graph(format="turtle")
