@@ -143,7 +143,14 @@ export default {
           name: this.$t("modal.export.mava.export_name"),
           icon: "mdi-file",
           export: "mava",
-          parameters: [],
+          parameters: [
+            {
+              field: "select_timeline",
+              name: "shot_timeline_id",
+              text: this.$t("modal.plugin.shot_timeline_name"),
+              hint: this.$t("modal.plugin.shot_timeline_hint"),
+            }
+          ],
         },
       ],
     };

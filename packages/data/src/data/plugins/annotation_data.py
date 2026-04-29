@@ -1,10 +1,9 @@
 import logging
 from typing import List
 from dataclasses import dataclass, field
-
 import numpy.typing as npt
 import numpy as np
-from mava.graph.builder import GraphBuilder
+import pandas as pd
 from ..manager import DataManager
 from ..data import Data
 from interface import analyser_pb2
@@ -19,14 +18,9 @@ class Annotation:
     def to_dict(self) -> dict:
         return {"start": self.start, "end": self.end, "labels": self.labels}
     
-    def compute_duration(self) -> float:
-        return self.end - self.start
-    
     def to_mava_dict(self) -> dict:
-        return {
-            **self.to_dict(),
-            "duration": self.compute_duration()
-        }
+        return {"start_seconds": self.start, "end_seconds": self.end, "annotations": self.labels}
+    
 
 
 @DataManager.export("AnnotationData", analyser_pb2.ANNOTATION_DATA)
@@ -57,28 +51,9 @@ class AnnotationData(Data):
             **super().to_dict(),
             "annotations": [ann.to_dict() for ann in self.annotations],
         }
-    
-    def to_mava_dict(self) -> List[dict]:
-        test = []
+
+    def to_pandas_df(self) -> pd.DataFrame:
+        mava_dict = {}
         for ann in self.annotations:
-            test.append(ann.to_mava_dict())
-        return test
-    
-    
-    def to_mava(self) -> bytes:
-        mava_data = self.to_mava_dict()
-        if mava_data is None:
-            logging.warning("No MAVA data generated. Returning empty bytes.")
-            return b""  # Return empty bytes instead of None
-        mava_mapping =  {
-                    "series_description": "Annotation",
-                    "value_description": "annotation",
-                    "value_type": "string",
-                    "value_prefix": "Annotation:: ",
-                    "time_column": "start",
-                    "value_column": "labels",
-                    "duration_column": "duration"
-                    }
-        mava_graph = GraphBuilder()
-        mava_graph.add_mapped_data(mava_data, mava_mapping)
-        return mava_graph.export_graph(format="turtle")
+            mava_dict |= ann.to_mava_dict()
+        return pd.DataFrame.from_dict(mava_dict)

@@ -13,6 +13,3 @@ dependencies = [
 
 [tool.uv.workspace]
 members = ["packages/*", "analyser", "backend", "inference_ray"]
-
-[tool.uv.sources]
-mava = { git = "https://github.com/sdsc-ordes/mava-api.git" }

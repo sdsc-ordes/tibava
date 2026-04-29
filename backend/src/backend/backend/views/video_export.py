@@ -29,7 +29,8 @@ from backend.models import (
     PluginRunResult,
     PluginRun,
 )
-from mava.graph.builder import GraphBuilder
+from mava_exchange import AnnotationSeries, MediaPackageWriter
+from mava_exchange.validate import validate_mediapkg
 from enum import Enum
 from data import DataManager, Shot, AnnotationData, Annotation as DataAnnotation
 import numpy as np
@@ -704,17 +705,23 @@ class VideoExport(View):
     
     def export_mava(self, parameters, video_db):
         data_manager = DataManager("/predictions/")
-        logging.info("Building MAVA graph")
-        graph_builder = GraphBuilder()
-
-        # Clear any existing graph state
-        graph_builder.clear_graph()
+        logging.info("Building MAVA exchange format (.mediapkg)")
 
         data = AnnotationData()
+        mava_data = []
+
+        # Extract info for media package creation
+
+        video_id = f"{video_db.id.hex}"
+        track_names = []
+        track_descriptions = []
 
         # Process all timelines with annotation data
         logging.info("Processing timeline")
-        for timeline_db in Timeline.objects.filter(video=video_db):
+
+        timeline_id = parameters.get("shot_timeline_id", True)
+
+        for timeline_db in Timeline.objects.filter(id=timeline_id):
             if timeline_db.type != Timeline.TYPE_ANNOTATION:
                 raise Exception
             elif timeline_db.type == None:
@@ -734,6 +741,8 @@ class VideoExport(View):
                         else:
                             anno = f"{name}"
                         annotations.append(anno)
+                        track_names.append(name)
+                        track_descriptions.append(name)
                     if len(annotations) > 0:
                         data_anno = DataAnnotation(
                             start = segment_db.start,
@@ -744,29 +753,41 @@ class VideoExport(View):
                     else:
                         logging.warning("No annotations found for segment %s", segment_db.id)
                         continue
-                    mava_data = data.to_mava()
-                    logging.info(f"MAVA data size: {len(mava_data)}")
+                    mava_data.append(data.to_pandas_df())
                     if mava_data is None:
                         raise ValueError("to_mava() returned None. Check AnnotationData structure.")
-                    logging.info("Adding MAVA data to MAVA graph")
-                    graph_builder.add_rdf_data(mava_data, format="turtle")
 
         # Export final graph as Turtle
-        logging.info("Exporting MAVA data")
-        turtle_output = graph_builder.export_graph(format="turtle")
+        logging.info("Creating mediapkg file")
+        mava_data_df = pd.concat(mava_data)
+        logging.info(f"data is {mava_data_df}")
+        with MediaPackageWriter(f"{video_db.id.hex}.mediapkg") as w:
+            w.add_video(video_id, f"{video_db.id.hex}.mediapkg")
+            logging.info(f"Added video {video_id} to mediapkg file")
+            annotation_list_series = AnnotationSeries(
+                name=timeline_id,
+                description=timeline_id
+            )
+            logging.info(f"Added track {annotation_list_series} to mediapkg file")
+            w.add_track(video_id, annotation_list_series, mava_data_df)
+            logging.info("Added track to mediapkg file")
+            w.write()
+            logging.info("Mediapkg file successfully written")
 
-        # Use stdout to export
+        logging.info("Validation in progress...")
 
-        logging.info("Exporting to stdout")
-        stdout = sys.stdout
-        sys.stdout = str_out = StringIO()
-        logging.info("Writing to stdout")
-        sys.stdout.write(turtle_output)
-        sys.stdout = stdout
-        logging.info("Done")
-        result = str_out.getvalue()
-        logging.info("Return values")
-        return result
+        validation = validate_mediapkg(f"{video_db.id.hex}.mediapkg")
+
+        if validation.valid:
+            logging.info("Package is valid.")
+        else:
+            logging.info(validation.summary())
+
+        logging.info("Returning mediapkg for download")
+
+        with open(f"{video_db.id.hex}.mediapkg", "rb") as f:
+            encoded_file = base64.b64encode(f.read()).decode("utf-8")
+        return encoded_file
 
     def post(self, request):
         try:
@@ -832,7 +853,7 @@ class VideoExport(View):
             elif request.POST.get("format") == "mava":
                 result = self.export_mava(parameters, video_db)
                 return JsonResponse(
-                    {"status": "ok", "file": result, "extension": "ttl"}
+                    {"status": "ok", "file": result, "extension": "mediapkg"}
                 )
 
             return JsonResponse({"status": "error", "type": "unknown_format"})

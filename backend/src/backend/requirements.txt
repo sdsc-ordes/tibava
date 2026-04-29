@@ -24,4 +24,4 @@ pympi-ling==1.70.2
 pandas==2.2.2
 ffmpeg-python
 msgpack_numpy
-mava @ git+https://github.com/sdsc-ordes/mava-api.git
+mava-exchange

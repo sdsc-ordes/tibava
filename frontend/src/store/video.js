@@ -227,7 +227,7 @@ export const useVideoStore = defineStore("video", {
                     console.log("data");
                     console.log(res.data);
                     if (res.data.status === "ok") {
-                        if (res.data.extension === "zip") {
+                        if (res.data.extension === "zip" | res.data.extension === "mediapkg") {
                             const filecontent = Buffer.from(res.data.file, 'base64');
                             let blob = new Blob([filecontent], { type: `application/zip` });
                             let link = document.createElement("a");
@@ -237,13 +237,6 @@ export const useVideoStore = defineStore("video", {
                         }
                         else if (res.data.extension === "csv" || res.data.extension === "eaf") {
                             let blob = new Blob([res.data.file], { type: `text/${res.data.extension}` });
-                            let link = document.createElement("a");
-                            link.href = window.URL.createObjectURL(blob);
-                            link.download = `${video_id}.${res.data.extension}`;
-                            link.click();
-                        }
-                        else if (res.data.extension === "ttl") {
-                            let blob = new Blob([res.data.file], { type: `text/turtle` });
                             let link = document.createElement("a");
                             link.href = window.URL.createObjectURL(blob);
                             link.download = `${video_id}.${res.data.extension}`;
