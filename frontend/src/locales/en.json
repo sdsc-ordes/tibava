@@ -103,6 +103,9 @@
       "elan": {
         "export_name": "ELAN"
       },
+      "mava": {
+        "export_name": "MAVA"
+      },
       "export": "export",
       "close": "close"
     },

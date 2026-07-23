@@ -1,10 +1,9 @@
 import logging
 from typing import List
 from dataclasses import dataclass, field
-
 import numpy.typing as npt
 import numpy as np
-
+import pandas as pd
 from ..manager import DataManager
 from ..data import Data
 from interface import analyser_pb2
@@ -18,6 +17,10 @@ class Annotation:
 
     def to_dict(self) -> dict:
         return {"start": self.start, "end": self.end, "labels": self.labels}
+    
+    def to_mava_dict(self) -> dict:
+        return {"start_seconds": self.start, "end_seconds": self.end, "annotations": self.labels}
+    
 
 
 @DataManager.export("AnnotationData", analyser_pb2.ANNOTATION_DATA)
@@ -48,3 +51,9 @@ class AnnotationData(Data):
             **super().to_dict(),
             "annotations": [ann.to_dict() for ann in self.annotations],
         }
+
+    def to_pandas_df(self) -> pd.DataFrame:
+        mava_dict = {}
+        for ann in self.annotations:
+            mava_dict |= ann.to_mava_dict()
+        return pd.DataFrame.from_dict(mava_dict)

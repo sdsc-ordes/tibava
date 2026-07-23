@@ -227,7 +227,7 @@ export const useVideoStore = defineStore("video", {
                     console.log("data");
                     console.log(res.data);
                     if (res.data.status === "ok") {
-                        if (res.data.extension === "zip") {
+                        if (res.data.extension === "zip" | res.data.extension === "mediapkg") {
                             const filecontent = Buffer.from(res.data.file, 'base64');
                             let blob = new Blob([filecontent], { type: `application/zip` });
                             let link = document.createElement("a");
