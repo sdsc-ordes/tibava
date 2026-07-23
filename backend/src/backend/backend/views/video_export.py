@@ -29,7 +29,7 @@ from backend.models import (
     PluginRunResult,
     PluginRun,
 )
-from mava_exchange import AnnotationSeries, MediaPackageWriter
+from mava_exchange import AnnotationSeries, ObservationSeries, DimensionSpec, MediaPackageWriter
 from mava_exchange.validate import validate_mediapkg
 from enum import Enum
 from data import DataManager, Shot, AnnotationData, Annotation as DataAnnotation
@@ -713,66 +713,133 @@ class VideoExport(View):
         # Extract info for media package creation
 
         video_id = f"{video_db.id.hex}"
-        track_names = []
-        track_descriptions = []
 
-        # Process all timelines with annotation data
-        logging.info("Processing timeline")
+        # We start writing a mediapkg and add tracks as we go 
 
-        timeline_id = parameters.get("shot_timeline_id", True)
-
-        for timeline_db in Timeline.objects.filter(id=timeline_id):
-            if timeline_db.type != Timeline.TYPE_ANNOTATION:
-                raise Exception
-            elif timeline_db.type == None:
-                raise Exception
-            logging.info("Loading annotation data")
-            for id, segment_db in enumerate(timeline_db.timelinesegment_set.all()):
-                # if the timeline contains annotations, export them
-                if len(segment_db.timelinesegmentannotation_set.all()) > 0:
-                    annotations = []
-                    for (
-                        segment_annotation_db
-                    ) in segment_db.timelinesegmentannotation_set.all():
-                        category = segment_annotation_db.annotation.category
-                        name = segment_annotation_db.annotation.name
-                        if category is not None:
-                            anno = f"{category.name}:{name}"
-                        else:
-                            anno = f"{name}"
-                        annotations.append(anno)
-                        track_names.append(name)
-                        track_descriptions.append(name)
-                    if len(annotations) > 0:
-                        data_anno = DataAnnotation(
-                            start = segment_db.start,
-                            end = segment_db.end,
-                            labels = annotations
-                        )
-                        data.annotations.append(data_anno)
-                    else:
-                        logging.warning("No annotations found for segment %s", segment_db.id)
-                        continue
-                    mava_data.append(data.to_pandas_df())
-                    if mava_data is None:
-                        raise ValueError("to_mava() returned None. Check AnnotationData structure.")
-
-        # Export final graph as Turtle
-        logging.info("Creating mediapkg file")
-        mava_data_df = pd.concat(mava_data)
-        logging.info(f"data is {mava_data_df}")
-        with MediaPackageWriter(f"{video_db.id.hex}.mediapkg") as w:
-            w.add_video(video_id, f"{video_db.id.hex}.mediapkg")
+        with MediaPackageWriter(f"{video_id}.mediapkg") as w:
+            w.add_video(video_id, f"{video_id}.mediapkg")
             logging.info(f"Added video {video_id} to mediapkg file")
-            annotation_list_series = AnnotationSeries(
-                name=timeline_id,
-                description=timeline_id
-            )
-            logging.info(f"Added track {annotation_list_series} to mediapkg file")
-            w.add_track(video_id, annotation_list_series, mava_data_df)
-            logging.info("Added track to mediapkg file")
+
+            for timeline_db in Timeline.objects.filter(video=video_db):
+                observation_df  = pd.DataFrame()
+                tl_type = timeline_db.plugin_run_result
+                logging.info(f"{timeline_db.name} --> {tl_type=}")
+
+                # if the type of the timeline is scalar
+                if tl_type is not None:
+
+                    data = data_manager.load(timeline_db.plugin_run_result.data_id)
+
+                    # if it is not of type SCALAR or RGB_HIST, skip it
+                    with data:
+                        if tl_type.type == PluginRunResult.TYPE_SCALAR:
+                            y = np.asarray(data.y)
+                            # print(f"Data {len(y)}\n {y}")
+                            time = np.asarray(data.time)
+                            # print(f"Data {len(time)}\n {time}")
+                            start_seconds = []
+                            annotations = []
+                            for i, time_stamp in enumerate(time):
+                                start_seconds.append(time_stamp)
+                                annotations.append(round(float(y[i]), 5))
+                            observation_df.insert(0, "start_seconds", start_seconds)
+                            observation_df.insert(1, f"{timeline_db.name}", annotations)
+                            track = ObservationSeries(
+                                name=f"{timeline_db.name}",
+                                description="",
+                                sampling_interval=0.1,
+                                dimensions=[
+                                    DimensionSpec(f"{timeline_db.name}", f"{timeline_db.name}_probability", "[0,1]"),
+                                ]
+                            )
+                            w.add_track(f"{video_id}", track, observation_df)
+                            logging.info(f"Added track {timeline_db.name} to mediapkg file")
+                            
+                        elif tl_type.type == PluginRunResult.TYPE_RGB_HIST:
+                            colors = np.asarray(data.colors)
+                            # print(f"Data {len(colors)}\n {colors}")
+                            time = np.asarray(data.time)
+                            # print(f"Data {len(time)}\n {time}")
+                            start_seconds = []
+                            annotations = []
+                            for i, time_stamp in enumerate(time):
+                                start_seconds.append(time_stamp)
+                                annotations.append(round(float(y[i]), 5))
+                            observation_df.insert(0, "start_seconds", start_seconds)
+                            observation_df.insert(1, f"{timeline_db.name}", annotations)
+                            track = ObservationSeries(
+                                name=f"{timeline_db.name}",
+                                description="",
+                                sampling_interval=0.1,
+                                dimensions=[
+                                    DimensionSpec(f"{timeline_db.name}", f"{timeline_db.name}_probability", "[0,1]"),
+                                ]
+                            )
+                            w.add_track(f"{video_id}", track, observation_df)
+                            logging.info(f"Added track {timeline_db.name} to mediapkg file")
+                        else:
+                            continue
             w.write()
-            logging.info("Mediapkg file successfully written")
+        ### Old code from here
+        # Process all timelines with annotation data
+        # logging.info("Processing timeline")
+
+        # timeline_id = parameters.get("shot_timeline_id", True)
+
+        # for timeline_db in Timeline.objects.filter(id=timeline_id):
+        #     if timeline_db.type != Timeline.TYPE_ANNOTATION:
+        #         raise Exception
+        #     elif timeline_db.type == None:
+        #         raise Exception
+        #     logging.info("Loading annotation data")
+        #     for id, segment_db in enumerate(timeline_db.timelinesegment_set.all()):
+        #         # if the timeline contains annotations, export them
+        #         if len(segment_db.timelinesegmentannotation_set.all()) > 0:
+        #             annotations = []
+        #             for (
+        #                 segment_annotation_db
+        #             ) in segment_db.timelinesegmentannotation_set.all():
+        #                 category = segment_annotation_db.annotation.category
+        #                 name = segment_annotation_db.annotation.name
+        #                 if category is not None:
+        #                     anno = f"{category.name}:{name}"
+        #                 else:
+        #                     anno = f"{name}"
+        #                 annotations.append(anno)
+        #                 track_names.append(name)
+        #                 track_descriptions.append(name)
+        #             if len(annotations) > 0:
+        #                 data_anno = DataAnnotat
+                        
+        #                 ion(
+        #                     start = segment_db.start,
+        #                     end = segment_db.end,
+        #                     labels = annotations
+        #                 )
+        #                 data.annotations.append(data_anno)
+        #             else:
+        #                 logging.warning("No annotations found for segment %s", segment_db.id)
+        #                 continue
+        #             mava_data.append(data.to_pandas_df())
+        #             if mava_data is None:
+        #                 raise ValueError("to_mava() returned None. Check AnnotationData structure.")
+
+        # # Export final graph as Turtle
+        # logging.info("Creating mediapkg file")
+        # mava_data_df = pd.concat(mava_data)
+        # logging.info(f"data is {mava_data_df}")
+        # with MediaPackageWriter(f"{video_db.id.hex}.mediapkg") as w:
+        #     w.add_video(video_id, f"{video_db.id.hex}.mediapkg")
+        #     logging.info(f"Added video {video_id} to mediapkg file")
+        #     annotation_list_series = AnnotationSeries(
+        #         name=timeline_id,
+        #         description=timeline_id
+        #     )
+        #     logging.info(f"Added track {annotation_list_series} to mediapkg file")
+        #     w.add_track(video_id, annotation_list_series, mava_data_df)
+        #     logging.info("Added track to mediapkg file")
+        #     w.write()
+        #     logging.info("Mediapkg file successfully written")
 
         logging.info("Validation in progress...")
 
